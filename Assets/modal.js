@@ -45,21 +45,38 @@ function customFileSelect(message, accept) {
     msg.className = "modal-msg";
     msg.textContent = message;
     card.appendChild(msg);
+
+    // 使用 <label> 包裹隐藏的 input，移动端 Firefox 上更可靠
     const fileInput = document.createElement("input");
     fileInput.type = "file";
     fileInput.accept = accept || ".so";
-    fileInput.style.cssText = "display:block;width:100%;margin-bottom:18px;font-size:14px;color:#fff;";
-    card.appendChild(fileInput);
+    fileInput.style.display = "none";
+
+    const pickLabel = document.createElement("label");
+    pickLabel.className = "modal-btn modal-btn-primary";
+    pickLabel.style.cssText = "display:block;text-align:center;cursor:pointer;margin-bottom:14px;";
+    pickLabel.textContent = "点击选择 .so 文件";
+    pickLabel.appendChild(fileInput);
+    card.appendChild(pickLabel);
+
+    const fileName = document.createElement("div");
+    fileName.style.cssText = "font-size:13px;color:#fff;margin-bottom:18px;min-height:18px;word-break:break-all;";
+    card.appendChild(fileName);
+
     function markActive() { window.__filePickerActive = true; }
     function markInactive() { window.__filePickerActive = false; }
     fileInput.addEventListener("click", markActive);
-    fileInput.addEventListener("focus", markActive);
-    fileInput.addEventListener("change", markInactive);
+    fileInput.addEventListener("change", () => {
+      markInactive();
+      const f = fileInput.files && fileInput.files[0];
+      fileName.textContent = f ? ("已选择: " + f.name) : "";
+    });
     function onWinFocus() {
       // 选择器关闭（无论是否选了文件）后稍延时清除标记
       setTimeout(markInactive, 300);
     }
     window.addEventListener("focus", onWinFocus);
+
     const btns = document.createElement("div");
     btns.className = "modal-btns";
     const cancelBtn = document.createElement("button");
