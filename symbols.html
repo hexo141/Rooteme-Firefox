@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rootme 符号提取</title>
+  <link rel="stylesheet" href="Assets/modal.css" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      user-select: none;
+      text-decoration: none;
+      transition: 0.25s;
+    }
+
+    body {
+      font-family: "微软雅黑", "PingFang SC", sans-serif;
+      background-image: url("https://t.alcy.cc/ycy");
+      background-size: cover;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-attachment: fixed;
+      color: #3e3e3e;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    /* ---- 主面板 (参考 FK_Selinux_Qualcomm) ---- */
+    .panel {
+      width: 100%;
+      max-width: 520px;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 20px;
+      padding: 1.8rem;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    /* ---- 标题 ---- */
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+    }
+
+    .title-row svg {
+      width: 32px;
+      height: 32px;
+      fill: none;
+      stroke: #3e3e3e;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .title-row span {
+      font-size: 22px;
+      font-weight: 600;
+      color: #3e3e3e;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+    }
+
+    /* ---- 拖放区域 (参考 .start-btn 玻璃拟态) ---- */
+    .drop-zone {
+      width: 100%;
+      height: 200px;
+      border-radius: 20px;
+      border: 2px dashed rgba(255, 255, 255, 0.35);
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 0.9rem;
+      cursor: pointer;
+      box-shadow:
+        0 4px 16px rgba(0, 0, 0, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5);
+      transition: all 0.3s;
+    }
+
+    .drop-zone:hover,
+    .drop-zone.drag-over {
+      border-color: rgba(255, 255, 255, 0.55);
+      background: rgba(255, 255, 255, 0.18);
+      box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+      transform: translateY(-2px);
+    }
+
+    .drop-zone.processing {
+      cursor: default;
+      pointer-events: none;
+      opacity: 0.7;
+    }
+
+    .drop-zone svg {
+      width: 48px;
+      height: 48px;
+      fill: none;
+      stroke: rgba(62, 62, 62, 0.45);
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .drop-zone .drop-text {
+      font-size: 16px;
+      color: rgba(62, 62, 62, 0.55);
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+    }
+
+    .drop-zone .drop-hint {
+      font-size: 12px;
+      color: rgba(62, 62, 62, 0.35);
+    }
+
+    .drop-zone .drop-spinner {
+      display: none;
+      width: 32px;
+      height: 32px;
+      border: 3px solid rgba(62, 62, 62, 0.15);
+      border-top-color: rgba(62, 62, 62, 0.6);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .drop-zone.processing .drop-spinner {
+      display: block;
+    }
+
+    .drop-zone.processing .drop-icon {
+      display: none;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ---- 进度条 ---- */
+    .progress-wrap {
+      width: 100%;
+      display: none;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .progress-wrap.visible {
+      display: flex;
+    }
+
+    .progress-bar-outer {
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.25);
+      box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+
+    .progress-bar-inner {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(62, 62, 62, 0.5), rgba(62, 62, 62, 0.8));
+      box-shadow: 0 0 6px rgba(62, 62, 62, 0.3);
+      transition: width 0.5s ease;
+    }
+
+    .progress-label {
+      font-size: 13px;
+      color: rgba(62, 62, 62, 0.6);
+      text-align: center;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+    }
+
+    /* ---- 日志区 (参考 FK_Selinux_Qualcomm .log-area) ---- */
+    .log-area {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 14px;
+      padding: 1rem;
+      font-family: "Consolas", "Monaco", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 40vh;
+      overflow-y: auto;
+      color: #2e2e2e;
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      box-shadow:
+        inset 2px -2px 1px -1px rgba(255, 255, 255, 0.7),
+        inset -2px 2px 1px -1px rgba(255, 255, 255, 0.7),
+        inset 0 0 2px rgba(0, 0, 0, 0.3);
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.3);
+      display: none;
+    }
+
+    .log-area.visible {
+      display: block;
+    }
+
+    .log-area::-webkit-scrollbar { width: 6px; }
+    .log-area::-webkit-scrollbar-track { background: transparent; }
+    .log-area::-webkit-scrollbar-thumb {
+      background: rgba(62, 62, 62, 0.3);
+      border-radius: 3px;
+    }
+
+    .log-area .log-line {
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .log-area .log-line.success {
+      color: #2d7d46;
+    }
+
+    .log-area .log-line.error {
+      color: #b5343a;
+    }
+
+    /* ---- 结果统计标签 ---- */
+    .result-stats {
+      width: 100%;
+      display: none;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+    }
+
+    .result-stats.visible {
+      display: flex;
+    }
+
+    .stat-chip {
+      padding: 0.35rem 0.9rem;
+      border-radius: 999px;
+      font-size: 12px;
+      color: #3e3e3e;
+      background: rgba(255, 255, 255, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+        0 2px 8px rgba(0, 0, 0, 0.04);
+      text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+    }
+
+    /* ---- 隐藏 input ---- */
+    #file-input {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="panel">
+
+    <!-- 标题 -->
+    <div class="title-row">
+      <svg viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+        <polyline points="10 9 9 9 8 9"/>
+      </svg>
+      <span>Kallsyms 符号提取</span>
+    </div>
+
+    <!-- 拖放区：选择文件后立即开始提取 -->
+    <div class="drop-zone" id="drop-zone">
+      <svg class="drop-icon" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <div class="drop-spinner" id="drop-spinner"></div>
+      <div class="drop-text" id="drop-text">拖放 boot.img / Image 到此处</div>
+      <div class="drop-hint" id="drop-hint">或点击选择文件</div>
+    </div>
+
+    <input type="file" id="file-input" accept=".img,image,boot*" />
+
+    <!-- 进度条 -->
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-bar-outer">
+        <div class="progress-bar-inner" id="progress-bar"></div>
+      </div>
+      <div class="progress-label" id="progress-label"></div>
+    </div>
+
+    <!-- 日志 -->
+    <div class="log-area" id="log-area"></div>
+
+    <!-- 结果统计 -->
+    <div class="result-stats" id="result-stats"></div>
+
+  </div>
+
+  <script src="Assets/symbols.js"></script>
+  <script src="Assets/modal.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      const dropZone      = document.getElementById('drop-zone');
+      const dropText      = document.getElementById('drop-text');
+      const dropHint      = document.getElementById('drop-hint');
+      const fileInput     = document.getElementById('file-input');
+      const progressWrap  = document.getElementById('progress-wrap');
+      const progressBar   = document.getElementById('progress-bar');
+      const progressLabel = document.getElementById('progress-label');
+      const logArea       = document.getElementById('log-area');
+      const resultStats   = document.getElementById('result-stats');
+
+      let symbolsText = null;
+      let extractedResult = null;
+
+      /* ---- 日志 ---- */
+      function clearLog() {
+        logArea.innerHTML = '';
+        logArea.classList.remove('visible');
+      }
+
+      function addLog(msg, cls) {
+        const div = document.createElement('div');
+        div.className = 'log-line' + (cls ? ' ' + cls : '');
+        div.textContent = msg;
+        logArea.appendChild(div);
+        logArea.classList.add('visible');
+        logArea.scrollTop = logArea.scrollHeight;
+      }
+
+      /* ---- 平滑进度动画 ---- */
+      let progressTarget = 0;
+      let progressCurrent = 0;
+      let progressAnimId = null;
+
+      function startProgressAnimation() {
+        if (progressAnimId) return;
+        function step() {
+          var diff = progressTarget - progressCurrent;
+          if (Math.abs(diff) < 0.3) {
+            progressCurrent = progressTarget;
+          } else {
+            progressCurrent += diff * 0.12;
+          }
+          progressBar.style.width = progressCurrent + '%';
+          progressLabel.textContent = progressLabel.textContent.replace(
+            /\d+(\.\d+)?%/, Math.round(progressCurrent) + '%'
+          );
+          if (progressCurrent < progressTarget) {
+            progressAnimId = requestAnimationFrame(step);
+          } else {
+            progressAnimId = null;
+          }
+        }
+        progressAnimId = requestAnimationFrame(step);
+      }
+
+      function setProgress(pct, label) {
+        progressTarget = Math.min(100, Math.max(0, pct));
+        progressWrap.classList.add('visible');
+        progressLabel.textContent = label + ' ' + Math.round(progressCurrent) + '%';
+        startProgressAnimation();
+      }
+
+      function resetUI() {
+        if (progressAnimId) { cancelAnimationFrame(progressAnimId); progressAnimId = null; }
+        progressTarget = 0;
+        progressCurrent = 0;
+        progressWrap.classList.remove('visible');
+        progressBar.style.width = '0%';
+        progressLabel.textContent = '';
+        resultStats.classList.remove('visible');
+        resultStats.innerHTML = '';
+        symbolsText = null;
+        extractedResult = null;
+      }
+
+      /* ---- 根据 symbols.js 的日志判断提取阶段，精确推进进度条 ---- */
+      function makeProgressLogger() {
+        var stages = [
+          { pattern: /\[gzip\]/,              pct: 3,  label: '解压中...' },
+          { pattern: /\[decompress\]/,        pct: 8,  label: '解压内核...' },
+          { pattern: /Version string/,        pct: 12, label: '检测内核版本...' },
+          { pattern: /Guessed architecture/,  pct: 20, label: '识别架构...' },
+          { pattern: /kallsyms_token_table/,  pct: 30, label: '定位符号令牌表...' },
+          { pattern: /kallsyms_token_index/,  pct: 40, label: '解析令牌索引...' },
+          { pattern: /kallsyms_markers/,      pct: 50, label: '定位符号标记...' },
+          { pattern: /kallsyms_names/,        pct: 58, label: '解析符号名表...' },
+          { pattern: /kallsyms_num_syms/,     pct: 65, label: '读取符号数量...' },
+          { pattern: /kallsyms_offsets/,      pct: 75, label: '解析地址偏移表...' },
+          { pattern: /kallsyms_addresses/,    pct: 75, label: '解析地址表...' },
+          { pattern: /Guessed the base/,      pct: 82, label: '推算基址...' },
+          { pattern: /Null addresses/,        pct: 85, label: '校验地址...' },
+          { pattern: /Negative offsets/,      pct: 85, label: '校验偏移...' },
+        ];
+        var hitCount = 0;
+        return function log(msg) {
+          addLog(msg);
+          for (var i = 0; i < stages.length; i++) {
+            if (stages[i].pattern.test(msg)) {
+              hitCount++;
+              setProgress(stages[i].pct, stages[i].label);
+              break;
+            }
+          }
+        };
+      }
+
+      /* ---- 核心：选择文件后立即提取 ---- */
+      async function processFile(file) {
+        if (!file) return;
+
+        dropZone.classList.add('processing');
+        dropText.textContent = '正在解析...';
+        dropHint.textContent = file.name;
+        resetUI();
+        clearLog();
+
+        var log = makeProgressLogger();
+
+        try {
+          setProgress(2, '读取文件中...');
+          var buf = await file.arrayBuffer();
+          addLog('[+] 文件大小: ' + buf.byteLength + ' 字节 (0x' + buf.byteLength.toString(16) + ')');
+
+          setProgress(5, '检测格式...');
+
+          if (typeof extractKallsymsFromImage !== 'function') {
+            throw new Error('symbols.js 未能正确加载');
+          }
+
+          extractedResult = await extractKallsymsFromImage(buf, { log: log });
+
+          setProgress(92, '格式化输出...');
+          symbolsText = formatSymbolsLikeNm(extractedResult);
+
+          setProgress(100, '提取完成!');
+          addLog('[+] 提取完成! 共 ' + extractedResult.symbolCount + ' 个符号', 'success');
+
+          resultStats.innerHTML = '';
+          var stats = [
+            '架构: ' + (extractedResult.architecture || '?'),
+            extractedResult.is64Bits ? '64位' : '32位',
+            '内核版本: ' + (extractedResult.versionNumber || '?'),
+            '符号总数: ' + extractedResult.symbolCount,
+            '基址: 0x' + (extractedResult.baseAddress ? extractedResult.baseAddress.toString(16) : '?'),
+          ];
+          stats.forEach(function (s) {
+            var chip = document.createElement('span');
+            chip.className = 'stat-chip';
+            chip.textContent = s;
+            resultStats.appendChild(chip);
+          });
+          resultStats.classList.add('visible');
+
+          var ok = await customConfirm(
+            '提取完成! 共 ' + extractedResult.symbolCount + ' 个符号。\n\n是否下载 symbols.txt ?'
+          );
+          if (ok) {
+            var blob = new Blob([symbolsText], { type: 'text/plain;charset=utf-8' });
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = 'symbols.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }
+
+        } catch (err) {
+          addLog('[!] 错误: ' + (err.message || err), 'error');
+          setProgress(0, '提取失败');
+          customAlert('符号提取失败: ' + (err.message || err));
+        } finally {
+          if (progressAnimId) { cancelAnimationFrame(progressAnimId); progressAnimId = null; }
+          dropZone.classList.remove('processing');
+          dropText.textContent = '拖放 boot.img / Image 到此处';
+          dropHint.textContent = '或点击选择文件';
+        }
+      }
+
+      /* ---- 拖放事件 ---- */
+      dropZone.addEventListener('click', function () {
+        if (dropZone.classList.contains('processing')) return;
+        fileInput.click();
+      });
+
+      dropZone.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        if (!dropZone.classList.contains('processing')) {
+          dropZone.classList.add('drag-over');
+        }
+      });
+
+      dropZone.addEventListener('dragleave', function () {
+        dropZone.classList.remove('drag-over');
+      });
+
+      dropZone.addEventListener('drop', function (e) {
+        e.preventDefault();
+        dropZone.classList.remove('drag-over');
+        if (dropZone.classList.contains('processing')) return;
+        var file = e.dataTransfer.files && e.dataTransfer.files[0];
+        if (file) processFile(file);
+      });
+
+      fileInput.addEventListener('change', function () {
+        var file = fileInput.files && fileInput.files[0];
+        if (file) processFile(file);
+        /* 重置以便再次选择同一文件也能触发 change */
+        fileInput.value = '';
+      });
+
+    })();
+  </script>
+
+</body>
+</html>
