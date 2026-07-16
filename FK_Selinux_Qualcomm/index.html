@@ -347,7 +347,7 @@
 
       /* 查找 Manager APK 资源 */
       let apkAsset = release.assets.find(function(a) {
-        return a.name.endsWith(".apk") && /manager/i.test(a.name);
+        return a.name.endsWith(".apk") && /KernelSU/i.test(a.name);
       });
       if (!apkAsset) {
         apkAsset = release.assets.find(function(a) { return a.name.endsWith(".apk"); });
@@ -387,37 +387,21 @@
         await adbShell(adb, "rm -f /data/local/tmp/kernelsu.apk");
       } catch (_) {}
 
-      /* 11. 推送 payload */
-      setStep("步骤 6/6: 推送 payload");
-      log("[*] 获取 payload 二进制...");
-      const payloadResp = await fetch("../Assets/payload");
-      if (!payloadResp.ok) {
-        throw new Error("payload 获取失败: HTTP " + payloadResp.status);
-      }
-      const payloadBuf = await payloadResp.arrayBuffer();
-      const payloadBlob = new Blob([payloadBuf]);
-      log("[+] payload 大小: " + payloadBuf.byteLength + " 字节");
-
-      log("[*] 推送 payload 到 /data/local/tmp/payload ...");
-      await pushBlob(adb, payloadBlob, "/data/local/tmp/payload", 0o755, function(done, total) {
-        const pct = Math.round(done / total * 100);
-        setStep("步骤 6/6: 推送 payload... " + pct + "%");
-      });
-      log("[+] payload 已推送");
-
-      /* 12. 设置权限并执行 payload */
-      setStep("步骤 6/6: 执行 payload（请耐心等待）");
-      log("[*] 设置执行权限...");
-      await adbShell(adb, "chmod 755 /data/local/tmp/payload");
-
-      log("[*] 执行: /data/local/tmp/payload");
-      const payloadResult = await adbShell(adb, "/data/local/tmp/payload");
-      log("[+] payload 输出:\n" + payloadResult.trim());
-
-      /* 清理 */
+      /* 11. 启动 KernelSU Manager */
+      setStep("步骤 6/6: 启动 KernelSU Manager");
+      log("[*] 启动 KernelSU Manager...");
       try {
-        await adbShell(adb, "rm -f /data/local/tmp/payload");
-      } catch (_) {}
+        await adbShell(adb, "monkey -p me.weishu.kernelsu -c android.intent.category.LAUNCHER 1");
+        log("[+] KernelSU Manager 已启动");
+      } catch (e) {
+        log("[*] monkey 启动失败，尝试 am start...");
+        try {
+          await adbShell(adb, "am start -n me.weishu.kernelsu/.MainActivity");
+          log("[+] KernelSU Manager 已启动");
+        } catch (e2) {
+          log("[*] 请手动打开 KernelSU Manager 应用");
+        }
+      }
 
       safeCloseTransport(transport);
 
@@ -426,8 +410,7 @@
       log("[+] 全部步骤执行完毕。");
       await customAlert(
         "所有步骤已完成！\n\n" +
-        "请打开手机上的 KernelSU Manager 应用，检查是否显示已越狱（jailbreak 模式）。\n\n" +
-        "如果未显示，请尝试再次运行 payload 或检查 SELinux 状态。"
+        "KernelSU Manager 已自动打开，请在手机上尝试点击越狱按钮。"
       );
     })().catch(async function(e) {
       const msg = e && e.message ? e.message : String(e);
